@@ -5,6 +5,7 @@ import csv
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from functools import wraps
 
 
 @dataclass
@@ -18,19 +19,50 @@ class Walk:
 
 def parse_walk(row: dict[str, str]) -> Walk:
     """Turn one row of the CSV file into a Walk, or raise ValueError if the row is bad."""
-    raise NotImplementedError("core: clean one row into a Walk, or raise ValueError for a bad row")
+    date = row["date"].strip()
+    place = row["place"].strip()
+
+    if not date:
+        raise ValueError("date is empty")
+
+    try:
+        steps = int(row["steps"])
+    except ValueError as error:
+        raise ValueError("steps must be a whole number") from error
+
+    if steps < 0:
+        raise ValueError(f"steps is below 0: {steps}")
+
+    return Walk(date=date, steps=steps, place=place)
 
 
 def none_on_error(func: Callable) -> Callable:
     """A decorator: the wrapped function returns None instead of raising ValueError."""
-    raise NotImplementedError("core: wrap func so that a ValueError becomes None")
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except ValueError:
+            return None
+
+    return wrapper
 
 
 def read_rows(path: Path) -> Iterator[dict[str, str]]:
     """Yield the rows of a CSV file one at a time, each as a dict of text."""
-    raise NotImplementedError("core: open the CSV file and yield its rows one at a time")
+    with open(path, "r", encoding="utf-8", newline="") as file:
+        reader = csv.DictReader(file)
+
+        for row in reader:
+            yield row
 
 
 def good_walks(rows: Iterable[dict[str, str]]) -> Iterator[Walk]:
     """Yield a Walk for every good row, one at a time, and skip the bad rows."""
-    raise NotImplementedError("core: yield a Walk for each good row and skip the bad ones")
+    safe_parse = none_on_error(parse_walk)
+
+    for row in rows:
+        walk = safe_parse(row)
+
+        if walk is not None:
+            yield walk
